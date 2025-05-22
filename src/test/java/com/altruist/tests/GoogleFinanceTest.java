@@ -1,12 +1,12 @@
 package com.altruist.tests;
 
+import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.By;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
-import org.openqa.selenium.support.ui.ExpectedConditions;
-import org.openqa.selenium.support.ui.WebDriverWait;
 import org.testng.Assert;
 import org.testng.annotations.*;
 
@@ -15,19 +15,20 @@ import java.util.*;
 
 public class GoogleFinanceTest {
     private WebDriver driver;
-    private WebDriverWait wait;
+
 
     @BeforeClass
     public void setup() {
-        // Initialize Chrome browser with default options
+        // Setup ChromeDriver using WebDriverManager (cross-platform friendly)
+        WebDriverManager.chromedriver().setup();
         ChromeOptions options = new ChromeOptions();
         driver = new ChromeDriver(options);
 
         // Maximize browser window
         driver.manage().window().maximize();
 
-        // Set up explicit wait
-        wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+        // Use only implicit wait globally
+        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
     }
 
     @Test
@@ -39,27 +40,32 @@ public class GoogleFinanceTest {
             // Navigate to Google Finance
             driver.get("https://www.google.com/finance");
 
-            // Wait until page title confirms the page is loaded
-            wait.until(ExpectedConditions.titleContains("Finance"));
+            // sleep to ensure the page is stable
+            Thread.sleep(5000);
 
             // Scroll down to ensure lazy-loaded content appears
-            for (int i = 0; i < 5; i++) {
-                ((org.openqa.selenium.JavascriptExecutor) driver).executeScript("window.scrollBy(0,500);");
+            for (int i = 0; i < 10; i++) {
+                ((org.openqa.selenium.JavascriptExecutor) driver).executeScript("window.scrollBy(0,600);");
                 Thread.sleep(1000); // Allow time for content to load
             }
-
-            // Find all stock symbols visible as clickable quote links
-            List<WebElement> symbolElements = driver.findElements(By.cssSelector("a[href^='/quote/'] .COaKTb"));
+            // Attempt to locate stock symbol elements
             List<String> uiSymbols = new ArrayList<>();
 
-            for (WebElement e : symbolElements) {
-                String symbol = e.getText().trim();
-                // Filter out only valid uppercase stock symbols
-                if (!symbol.isEmpty() && symbol.matches("[A-Z.]+")) {
-                    uiSymbols.add(symbol);
+            // Get all <div> elements on the page
+            List<WebElement> allDivs = driver.findElements(By.tagName("div"));
+            for (int i = 0; i < allDivs.size(); i++) {
+                try {
+                    WebElement div = allDivs.get(i);
+                    String text = div.getText().trim();// Get the visible text
+                    if (!text.isEmpty() && text.matches("[A-Z.]{2,6}")) {
+                        System.out.println("Possible Symbol: " + text); // Save it to the list
+                        uiSymbols.add(text);
+                    }
+                } catch (StaleElementReferenceException staleEx) {
+                    // If the element is no longer in the DOM, skip it!
+                    continue;
                 }
             }
-
             // Create sets for comparison
             Set<String> actualSet = new HashSet<>(uiSymbols);
             Set<String> expectedSet = new HashSet<>(expectedSymbols);
